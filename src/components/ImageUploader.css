@@ -1,0 +1,81 @@
+.image-uploader-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-body-upload {
+  flex: 1;
+  display: flex;
+  padding: 0;
+}
+
+.drop-zone {
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  text-align: center;
+  background: transparent;
+  transition: border-color 0.2s ease;
+  cursor: pointer;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.drop-zone:hover,
+.drop-zone:focus {
+  border-color: var(--border-hover);
+}
+
+.drop-zone.dragging {
+  border-color: var(--accent-subtle);
+}
+
+.drop-zone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.upload-icon {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.drop-zone-text {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+  margin: 0;
+}
+
+.drop-zone-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+  padding: 0;
+  transition: opacity 0.2s ease;
+  opacity: 0.8;
+}
+
+.link-button:hover {
+  opacity: 1;
+}
+
+.file-input {
+  display: none;
+}

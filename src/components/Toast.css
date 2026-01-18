@@ -1,0 +1,42 @@
+.toast {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-md);
+  color: var(--text-secondary);
+  min-width: 250px;
+  max-width: 400px;
+  font-size: 0.85rem;
+  font-weight: 400;
+  animation: slideIn 0.2s ease-out;
+  pointer-events: auto;
+}
+
+.toast-success {
+  border-color: var(--border-hover);
+}
+
+.toast-error {
+  border-color: var(--border-hover);
+}
+
+.toast-info {
+  border-color: var(--border-hover);
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}

@@ -1,0 +1,4 @@
+.card-body {
+  padding: var(--spacing-3);
+  flex: 1;
+}
