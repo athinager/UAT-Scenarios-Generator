@@ -33,26 +33,7 @@ export async function generateScenariosFromFigmaLink(figmaLink: string): Promise
         (errorData?.error as string) ||
         (errorData?.message as string) ||
         `HTTP ${response.status}`;
-
-      const normalized = String(rawMessage);
-      const normalizedLower = normalized.toLowerCase();
-      const isQuota =
-        response.status === 429 &&
-        (normalizedLower.includes('quota') ||
-          normalizedLower.includes('insufficient_quota') ||
-          normalizedLower.includes('resource_exhausted'));
-
-      if (isQuota) {
-        throw new Error(
-          'AI quota exceeded. Check your AI provider plan/billing (or switch API key), then try again.'
-        );
-      }
-
-      if (response.status === 429) {
-        throw new Error('Rate limit exceeded. Please wait a bit and try again.');
-      }
-
-      throw new Error(normalized || 'Failed to generate scenarios');
+      throw new Error(String(rawMessage).trim() || `Request failed (${response.status})`);
     }
 
     const data = (await response.json()) as FigmaApiResponse;

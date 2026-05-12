@@ -117,6 +117,60 @@ interface GeneratedScenarioPayload {
   expectedResult: string;
 }
 
+const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions';
+
+function openAiUpstreamMessage(errorData: unknown): string {
+  const e = errorData as { error?: { message?: string }; message?: string };
+  return e?.error?.message || e?.message || '';
+}
+
+/** Billing / hard quota — retrying will not help. */
+function isInsufficientQuotaMessage(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    msg.includes('insufficient_quota') ||
+    m.includes('exceeded your current quota') ||
+    m.includes('billing hard limit') ||
+    m.includes('no payment method')
+  );
+}
+
+/**
+ * One retry after a short wait when 429 is a soft rate limit (not billing/quota).
+ */
+async function postOpenAiChatCompletion(
+  apiKey: string,
+  body: Record<string, unknown>
+): Promise<Response> {
+  const init: RequestInit = {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  };
+
+  let res = await fetch(OPENAI_CHAT_URL, init);
+  if (res.status !== 429) {
+    return res;
+  }
+
+  let errJson: unknown = {};
+  try {
+    errJson = await res.clone().json();
+  } catch {
+    /* ignore */
+  }
+  const msg = openAiUpstreamMessage(errJson);
+  if (isInsufficientQuotaMessage(msg)) {
+    return res;
+  }
+
+  await new Promise((r) => setTimeout(r, 4500));
+  return fetch(OPENAI_CHAT_URL, init);
+}
+
 function isAllowedCorsOrigin(origin: string): boolean {
   if (!origin) return false;
   const allowed = new Set([
@@ -215,26 +269,20 @@ ${templateRule}
 
 ${jsonInstruction}`;
 
+  const model = process.env.OPENAI_MODEL?.trim() || 'gpt-4o-mini';
+  const maxOutRaw = parseInt(process.env.OPENAI_MAX_OUTPUT_TOKENS || '4096', 10);
+  const max_tokens = Math.min(Math.max(Number.isFinite(maxOutRaw) ? maxOutRaw : 4096, 1024), 8192);
+
+  const requestBody: Record<string, unknown> = {
+    model,
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens,
+    temperature: 0.45,
+    response_format: { type: 'json_object' },
+  };
+
   try {
-    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        max_tokens: 6000,
-        temperature: 0.45,
-        response_format: { type: 'json_object' },
-      }),
-    });
+    const openaiResponse = await postOpenAiChatCompletion(apiKey, requestBody);
 
     if (!openaiResponse.ok) {
       const errorData = await openaiResponse.json().catch(() => ({} as any));
@@ -242,15 +290,16 @@ ${jsonInstruction}`;
       const upstreamMessage =
         errorData?.error?.message || errorData?.message || `Upstream AI provider error (HTTP ${upstreamStatus})`;
 
-      console.error('OpenAI API error:', { upstreamStatus, errorData });
+      console.error('OpenAI API error:', { upstreamStatus, errorData, model });
 
       if (upstreamStatus === 429) {
+        const quota =
+          isInsufficientQuotaMessage(upstreamMessage) ||
+          upstreamMessage.toLowerCase().includes('insufficient_quota');
         return res.status(429).json({
-          error:
-            upstreamMessage.includes('insufficient_quota') ||
-            upstreamMessage.toLowerCase().includes('quota')
-              ? 'AI quota exceeded. Check your OpenAI plan/billing or use a different API key.'
-              : 'AI rate limit exceeded. Please wait a bit and try again.',
+          error: quota
+            ? 'OpenAI usage limit reached or billing required. Add a payment method at https://platform.openai.com/settings/organization/billing (or buy credits), or set OPENAI_API_KEY in Vercel to a key from an account with available quota.'
+            : 'AI rate limit exceeded. Wait a minute and try again.',
         });
       }
 
