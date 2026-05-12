@@ -117,18 +117,31 @@ interface GeneratedScenarioPayload {
   expectedResult: string;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const origin = req.headers.origin || '';
-  const allowedOrigins = [
+function isAllowedCorsOrigin(origin: string): boolean {
+  if (!origin) return false;
+  const allowed = new Set([
     'https://athgeronatsiou-creator.github.io',
     'https://athgeronatsiou-creator.github.io/UAT-Scenarios-Generator',
     'http://localhost:5173',
     'http://localhost:5174',
     'http://localhost:5175',
     'http://localhost:3000',
-  ];
+  ]);
+  if (allowed.has(origin)) return true;
+  if (origin.includes('localhost') && origin.includes('http://')) return true;
+  try {
+    const u = new URL(origin);
+    if (u.protocol === 'https:' && u.hostname.endsWith('.vercel.app')) return true;
+  } catch {
+    /* invalid */
+  }
+  return false;
+}
 
-  if (allowedOrigins.includes(origin) || (origin.includes('localhost') && origin.includes('http://'))) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const origin = req.headers.origin || '';
+
+  if (isAllowedCorsOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
