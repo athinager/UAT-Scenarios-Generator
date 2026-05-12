@@ -35,9 +35,12 @@
 
 .workspace-grid {
   display: grid;
-  grid-template-columns: 360px 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--spacing-3);
   align-items: start;
+  max-width: 640px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .toast-container {

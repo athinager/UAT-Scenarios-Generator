@@ -9,7 +9,7 @@ export const API_CONFIG = {
   endpoint: '/api/uat',
   
   // Timeout in milliseconds
-  timeout: 60000, // 60 seconds (OpenAI can be slow)
+  timeout: 120000, // 120 seconds (OpenAI Vision with multiple images can be slow)
 };
 
 export function getApiUrl(): string {

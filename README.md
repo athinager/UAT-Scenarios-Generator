@@ -4,9 +4,9 @@ A static GitHub Pages web app for generating comprehensive User Acceptance Test 
 
 ## Features
 
-- **Dark "Sizzey" UI**: Neon accents, subtle gradients, glass cards, rounded, spacious design
+- **Dark minimal UI**: Black, white and greys, no gradients, glass cards, rounded, compact design
 - **Image Upload**: Drag & drop or file picker for PNG/JPG/WebP images
-- **Image Management**: Reorder images (drag & drop or up/down buttons), remove, clear
+- **Image Management**: Reorder images (drag & drop), remove, clear
 - **OCR Analysis**: Extracts text from images using tesseract.js
 - **UI Element Detection**: Lightweight computer vision heuristics to detect buttons, forms, headers, navigation, modals, tables, lists, and more
 - **Scenario Generation**: Creates comprehensive UAT scenarios including:

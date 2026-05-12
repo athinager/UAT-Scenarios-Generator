@@ -2,6 +2,15 @@
   width: 100%;
 }
 
+.scenario-section-title {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
 .scenario-header {
   display: flex;
   justify-content: space-between;
@@ -11,17 +20,14 @@
   gap: var(--spacing-md);
 }
 
-.scenario-header h2 {
-  font-size: 0.95rem;
-  color: var(--text-secondary);
-  font-weight: 400;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.scenario-header .scenario-section-title {
+  margin: 0;
 }
 
 .scenario-actions {
   display: flex;
   gap: var(--spacing-sm);
+  flex-wrap: wrap;
 }
 
 .action-button {
@@ -49,6 +55,11 @@
   cursor: not-allowed;
 }
 
+.action-button-primary {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
 .analyzing-container {
   text-align: center;
   padding: var(--spacing-xl);
@@ -64,25 +75,12 @@
   font-weight: 400;
 }
 
-.progress-bar-container {
-  width: 100%;
-  max-width: 400px;
-  margin: 0 auto var(--spacing-sm);
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  height: 2px;
-}
-
-.progress-bar {
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.3s ease;
-}
-
 .progress-text {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  max-width: 28rem;
+  margin: 0 auto;
+  line-height: 1.5;
 }
 
 .empty-state {
@@ -95,37 +93,84 @@
   font-size: 0.9rem;
 }
 
-.scenarios-list {
+.scenarios-detail-list {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  max-height: 600px;
-  overflow-y: auto;
-  background: var(--border-color);
-}
-
-.scenario-card {
-  background: var(--bg-card);
-  border: none;
-  padding: var(--spacing-md);
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
   gap: var(--spacing-md);
-  transition: background 0.2s ease;
+  max-height: none;
 }
 
-.scenario-card:hover {
-  background: var(--bg-card-hover);
+.scenario-detail-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-md);
 }
 
-.scenario-content {
-  flex: 1;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  margin: 0;
+.scenario-detail-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--spacing-sm);
+}
+
+.scenario-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md);
+}
+
+.scenario-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.scenario-field-span {
+  grid-column: 1 / -1;
+}
+
+.scenario-field-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.scenario-input,
+.scenario-textarea,
+.scenario-select {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
   font-size: 0.9rem;
-  font-weight: 400;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+.scenario-input:focus,
+.scenario-textarea:focus,
+.scenario-select:focus {
+  outline: none;
+  border-color: var(--border-hover);
+}
+
+.scenario-textarea {
+  resize: vertical;
+  min-height: 3rem;
+}
+
+.scenario-textarea-sm {
+  min-height: 2.5rem;
+}
+
+.scenario-select {
+  cursor: pointer;
+  padding: var(--spacing-xs) var(--spacing-sm);
 }
 
 .copy-button {
@@ -135,13 +180,9 @@
   padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
   font-size: 0.8rem;
   font-weight: 400;
   transition: border-color 0.2s ease, color 0.2s ease;
-  flex-shrink: 0;
 }
 
 .copy-button:hover {
@@ -154,21 +195,17 @@
     flex-direction: column;
     align-items: stretch;
   }
-  
+
   .scenario-actions {
     justify-content: stretch;
   }
-  
+
   .action-button {
     flex: 1;
     justify-content: center;
   }
-  
-  .scenario-card {
-    flex-direction: column;
-  }
-  
-  .copy-button {
-    align-self: flex-end;
+
+  .scenario-fields {
+    grid-template-columns: 1fr;
   }
 }

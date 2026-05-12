@@ -1,18 +1,9 @@
 import { useState, useCallback } from 'react';
-import ImageUploader from './components/ImageUploader';
-import ImageGallery from './components/ImageGallery';
+import FigmaLinkInput from './components/FigmaLinkInput';
 import ScenarioGenerator from './components/ScenarioGenerator';
 import Toast from './components/Toast';
 import PageContainer from './components/PageContainer';
 import './App.css';
-
-export interface UploadedImage {
-  id: string;
-  file: File;
-  preview: string;
-  order: number;
-  name: string;
-}
 
 export interface ToastMessage {
   id: string;
@@ -21,48 +12,10 @@ export interface ToastMessage {
 }
 
 function App() {
-  const [images, setImages] = useState<UploadedImage[]>([]);
+  const [linkDraft, setLinkDraft] = useState('');
+  const [activeFigmaLink, setActiveFigmaLink] = useState('');
+  const [generateToken, setGenerateToken] = useState(0);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-
-  const addImages = useCallback((files: File[]) => {
-    const newImages: UploadedImage[] = files.map((file, index) => ({
-      id: `${Date.now()}-${index}`,
-      file,
-      preview: URL.createObjectURL(file),
-      order: images.length + index,
-      name: `Screen ${images.length + index + 1}`,
-    }));
-    setImages((prev) => [...prev, ...newImages]);
-  }, [images.length]);
-
-  const removeImage = useCallback((id: string) => {
-    setImages((prev) => {
-      const image = prev.find(img => img.id === id);
-      if (image) {
-        URL.revokeObjectURL(image.preview);
-      }
-      return prev.filter(img => img.id !== id).map((img, index) => ({
-        ...img,
-        order: index,
-        name: img.name.replace(/Screen \d+/, `Screen ${index + 1}`),
-      }));
-    });
-  }, []);
-
-  const clearImages = useCallback(() => {
-    images.forEach(img => URL.revokeObjectURL(img.preview));
-    setImages([]);
-  }, [images]);
-
-  const reorderImages = useCallback((newImages: UploadedImage[]) => {
-    setImages(newImages);
-  }, []);
-
-  const renameImage = useCallback((id: string, newName: string) => {
-    setImages((prev) => prev.map((img) => 
-      img.id === id ? { ...img, name: newName || `Screen ${img.order + 1}` } : img
-    ));
-  }, []);
 
   const showToast = useCallback((message: string, type: ToastMessage['type'] = 'info') => {
     const id = `${Date.now()}-${Math.random()}`;
@@ -72,36 +25,41 @@ function App() {
     }, 3000);
   }, []);
 
+  const handleGenerate = useCallback(() => {
+    const trimmed = linkDraft.trim();
+    setActiveFigmaLink(trimmed);
+    setGenerateToken((n) => n + 1);
+  }, [linkDraft]);
+
   return (
     <div className="app">
       <a href="#main-content" className="skip-link">
         Skip to main content
       </a>
-      
+
       <PageContainer>
         <header className="app-hero">
           <h1>UAT Scenarios Generator</h1>
-          <p className="subtitle">Generate comprehensive test scenarios from UI screenshots</p>
+          <p className="subtitle">
+            Paste a Figma link to generate structured UAT scenarios from your designs
+          </p>
         </header>
 
         <main id="main-content" className="app-main">
           <div className="workspace-grid">
-            <ImageUploader onImagesAdded={addImages} showToast={showToast} />
-            {images.length > 0 && (
-              <ImageGallery
-                images={images}
-                onRemove={removeImage}
-                onClear={clearImages}
-                onReorder={reorderImages}
-                onRename={renameImage}
-              />
-            )}
+            <FigmaLinkInput
+              value={linkDraft}
+              onChange={setLinkDraft}
+              onGenerate={handleGenerate}
+              showToast={showToast}
+            />
           </div>
-          
-          {images.length > 0 && (
+
+          {activeFigmaLink !== '' && (
             <ScenarioGenerator
-              images={images}
-              onCopy={showToast}
+              key={`${activeFigmaLink}-${generateToken}`}
+              figmaLink={activeFigmaLink}
+              onNotify={showToast}
             />
           )}
         </main>
@@ -109,11 +67,7 @@ function App() {
 
       <div className="toast-container" aria-live="polite" aria-atomic="true">
         {toasts.map((toast) => (
-          <Toast
-            key={toast.id}
-            message={toast.message}
-            type={toast.type}
-          />
+          <Toast key={toast.id} message={toast.message} type={toast.type} />
         ))}
       </div>
     </div>
