@@ -52,7 +52,7 @@ function FigmaLinkInput({
       </CardHeader>
       <CardBody>
         <form className="figma-link-form" onSubmit={handleSubmit}>
-          <div className="figma-paste-panel" aria-hidden="false">
+          <div className="figma-paste-panel">
             <div className="figma-paste-panel-inner">
               <div className="figma-paste-icon-wrap" aria-hidden="true">
                 <svg
