@@ -186,6 +186,7 @@ function isAllowedCorsOrigin(origin: string): boolean {
   try {
     const u = new URL(origin);
     if (u.protocol === 'https:' && u.hostname.endsWith('.vercel.app')) return true;
+    if (u.protocol === 'https:' && u.hostname.endsWith('github.io')) return true;
   } catch {
     /* invalid */
   }

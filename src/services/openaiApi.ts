@@ -33,6 +33,12 @@ export async function generateScenariosFromFigmaLink(figmaLink: string): Promise
         (errorData?.error as string) ||
         (errorData?.message as string) ||
         `HTTP ${response.status}`;
+      if (response.status === 405) {
+        throw new Error(
+          'HTTP 405: This site is static (GitHub Pages) and cannot run the API. Rebuild with VITE_VERCEL_API_URL pointing at your Vercel deployment, or use the Vercel app URL directly.'
+        );
+      }
+
       throw new Error(String(rawMessage).trim() || `Request failed (${response.status})`);
     }
 
