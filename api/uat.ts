@@ -117,44 +117,53 @@ interface GeneratedScenarioPayload {
   expectedResult: string;
 }
 
-const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions';
+type AiProvider = 'openai' | 'gemini';
 
-function openAiUpstreamMessage(errorData: unknown): string {
-  const e = errorData as { error?: { message?: string }; message?: string };
+const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions';
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+function resolveProvider(): AiProvider | null {
+  const explicit = process.env.AI_PROVIDER?.trim().toLowerCase();
+  if (explicit === 'gemini' || explicit === 'openai') return explicit;
+  if (process.env.GEMINI_API_KEY?.trim()) return 'gemini';
+  if (process.env.OPENAI_API_KEY?.trim()) return 'openai';
+  return null;
+}
+
+function upstreamErrorMessage(errorData: unknown): string {
+  const e = errorData as {
+    error?: { message?: string; status?: string };
+    message?: string;
+  };
   return e?.error?.message || e?.message || '';
 }
 
 /** Billing / hard quota — retrying will not help. */
-function isInsufficientQuotaMessage(msg: string): boolean {
+function isInsufficientQuotaMessage(msg: string, provider: AiProvider): boolean {
   const m = msg.toLowerCase();
+  if (provider === 'openai') {
+    return (
+      msg.includes('insufficient_quota') ||
+      m.includes('exceeded your current quota') ||
+      m.includes('billing hard limit') ||
+      m.includes('no payment method')
+    );
+  }
   return (
-    msg.includes('insufficient_quota') ||
+    m.includes('resource_exhausted') ||
+    m.includes('quota exceeded') ||
     m.includes('exceeded your current quota') ||
-    m.includes('billing hard limit') ||
-    m.includes('no payment method')
+    m.includes('billing')
   );
 }
 
-/**
- * One retry after a short wait when 429 is a soft rate limit (not billing/quota).
- */
-async function postOpenAiChatCompletion(
-  apiKey: string,
-  body: Record<string, unknown>
+async function fetchWith429Retry(
+  url: string,
+  init: RequestInit,
+  provider: AiProvider
 ): Promise<Response> {
-  const init: RequestInit = {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  };
-
-  let res = await fetch(OPENAI_CHAT_URL, init);
-  if (res.status !== 429) {
-    return res;
-  }
+  let res = await fetch(url, init);
+  if (res.status !== 429) return res;
 
   let errJson: unknown = {};
   try {
@@ -162,13 +171,156 @@ async function postOpenAiChatCompletion(
   } catch {
     /* ignore */
   }
-  const msg = openAiUpstreamMessage(errJson);
-  if (isInsufficientQuotaMessage(msg)) {
+  if (isInsufficientQuotaMessage(upstreamErrorMessage(errJson), provider)) {
     return res;
   }
 
   await new Promise((r) => setTimeout(r, 4500));
-  return fetch(OPENAI_CHAT_URL, init);
+  return fetch(url, init);
+}
+
+async function callOpenAi(prompt: string): Promise<{ ok: true; text: string } | { ok: false; status: number; message: string }> {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) {
+    return { ok: false, status: 500, message: 'OPENAI_API_KEY is not configured.' };
+  }
+
+  const model = process.env.OPENAI_MODEL?.trim() || 'gpt-4o-mini';
+  const maxOutRaw = parseInt(process.env.OPENAI_MAX_OUTPUT_TOKENS || '4096', 10);
+  const max_tokens = Math.min(Math.max(Number.isFinite(maxOutRaw) ? maxOutRaw : 4096, 1024), 8192);
+
+  const body = {
+    model,
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens,
+    temperature: 0.45,
+    response_format: { type: 'json_object' },
+  };
+
+  const res = await fetchWith429Retry(
+    OPENAI_CHAT_URL,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    },
+    'openai'
+  );
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    const message =
+      upstreamErrorMessage(errorData) || `OpenAI error (HTTP ${res.status})`;
+    console.error('OpenAI API error:', { status: res.status, errorData, model });
+    return { ok: false, status: res.status, message };
+  }
+
+  const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+  const text = data.choices?.[0]?.message?.content || '';
+  return { ok: true, text };
+}
+
+async function callGemini(prompt: string): Promise<{ ok: true; text: string } | { ok: false; status: number; message: string }> {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) {
+    return { ok: false, status: 500, message: 'GEMINI_API_KEY is not configured.' };
+  }
+
+  const model = process.env.GEMINI_MODEL?.trim() || 'gemini-2.0-flash';
+  const maxOutRaw = parseInt(process.env.GEMINI_MAX_OUTPUT_TOKENS || '4096', 10);
+  const maxOutputTokens = Math.min(
+    Math.max(Number.isFinite(maxOutRaw) ? maxOutRaw : 4096, 1024),
+    8192
+  );
+
+  const url = `${GEMINI_API_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const body = {
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.45,
+      maxOutputTokens,
+      responseMimeType: 'application/json',
+    },
+  };
+
+  const res = await fetchWith429Retry(
+    url,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+    'gemini'
+  );
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    const message =
+      upstreamErrorMessage(errorData) || `Gemini error (HTTP ${res.status})`;
+    console.error('Gemini API error:', { status: res.status, errorData, model });
+    return { ok: false, status: res.status, message };
+  }
+
+  const data = (await res.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return { ok: true, text };
+}
+
+function mapAiError(status: number, message: string, provider: AiProvider): string {
+  if (status === 429) {
+    const quota = isInsufficientQuotaMessage(message, provider);
+    if (provider === 'gemini') {
+      return quota
+        ? 'Gemini quota exceeded. Check usage at https://aistudio.google.com/ or enable billing in Google AI Studio, or set GEMINI_API_KEY in Vercel to a key with available quota.'
+        : 'Gemini rate limit exceeded. Wait a minute and try again.';
+    }
+    return quota
+      ? 'OpenAI usage limit reached or billing required. Add a payment method at https://platform.openai.com/settings/organization/billing (or buy credits), or set OPENAI_API_KEY in Vercel to a key with available quota.'
+      : 'AI rate limit exceeded. Wait a minute and try again.';
+  }
+
+  if (status === 401 || status === 403) {
+    return provider === 'gemini'
+      ? 'Gemini authentication failed. Verify GEMINI_API_KEY is set correctly in Vercel (create one at https://aistudio.google.com/apikey).'
+      : 'AI authentication failed. Verify OPENAI_API_KEY is set correctly in Vercel.';
+  }
+
+  return message || 'Failed to generate scenarios. Please try again.';
+}
+
+function parseScenariosJson(
+  rawContent: string,
+  figmaLink: string
+): { ok: true; scenarios: ReturnType<typeof formatScenarios> } | { ok: false; error: string } {
+  let parsed: { scenarios?: GeneratedScenarioPayload[] };
+  try {
+    parsed = JSON.parse(rawContent);
+  } catch {
+    return { ok: false, error: 'Invalid AI response format' };
+  }
+
+  const list = Array.isArray(parsed.scenarios) ? parsed.scenarios : [];
+  if (list.length === 0) {
+    return { ok: false, error: 'No scenarios generated' };
+  }
+
+  return { ok: true, scenarios: formatScenarios(list, figmaLink) };
+}
+
+function formatScenarios(list: GeneratedScenarioPayload[], figmaLink: string) {
+  return list.map((s) => ({
+    name: String(s.name ?? '').trim(),
+    flowOrScreen: String(s.flowOrScreen ?? '').trim(),
+    description: String(s.description ?? '').trim(),
+    steps: Array.isArray(s.steps) ? s.steps.map((x) => String(x)) : [],
+    expectedResult: String(s.expectedResult ?? '').trim(),
+    figmaLink,
+  }));
 }
 
 function isAllowedCorsOrigin(origin: string): boolean {
@@ -227,10 +379,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const figmaLink = validation.figmaLink;
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    console.error('OPENAI_API_KEY not set');
-    return res.status(500).json({ error: 'Server configuration error' });
+  const provider = resolveProvider();
+  if (!provider) {
+    console.error('No AI provider configured');
+    return res.status(500).json({
+      error:
+        'Server configuration error: set GEMINI_API_KEY (recommended) or OPENAI_API_KEY in Vercel, optionally AI_PROVIDER=gemini|openai.',
+    });
   }
 
   const figmaToken = process.env.FIGMA_ACCESS_TOKEN;
@@ -270,76 +425,22 @@ ${templateRule}
 
 ${jsonInstruction}`;
 
-  const model = process.env.OPENAI_MODEL?.trim() || 'gpt-4o-mini';
-  const maxOutRaw = parseInt(process.env.OPENAI_MAX_OUTPUT_TOKENS || '4096', 10);
-  const max_tokens = Math.min(Math.max(Number.isFinite(maxOutRaw) ? maxOutRaw : 4096, 1024), 8192);
-
-  const requestBody: Record<string, unknown> = {
-    model,
-    messages: [{ role: 'user', content: prompt }],
-    max_tokens,
-    temperature: 0.45,
-    response_format: { type: 'json_object' },
-  };
-
   try {
-    const openaiResponse = await postOpenAiChatCompletion(apiKey, requestBody);
+    const aiResult =
+      provider === 'gemini' ? await callGemini(prompt) : await callOpenAi(prompt);
 
-    if (!openaiResponse.ok) {
-      const errorData = await openaiResponse.json().catch(() => ({} as any));
-      const upstreamStatus = openaiResponse.status;
-      const upstreamMessage =
-        errorData?.error?.message || errorData?.message || `Upstream AI provider error (HTTP ${upstreamStatus})`;
-
-      console.error('OpenAI API error:', { upstreamStatus, errorData, model });
-
-      if (upstreamStatus === 429) {
-        const quota =
-          isInsufficientQuotaMessage(upstreamMessage) ||
-          upstreamMessage.toLowerCase().includes('insufficient_quota');
-        return res.status(429).json({
-          error: quota
-            ? 'OpenAI usage limit reached or billing required. Add a payment method at https://platform.openai.com/settings/organization/billing (or buy credits), or set OPENAI_API_KEY in Vercel to a key from an account with available quota.'
-            : 'AI rate limit exceeded. Wait a minute and try again.',
-        });
-      }
-
-      if (upstreamStatus === 401 || upstreamStatus === 403) {
-        return res.status(500).json({
-          error: 'AI authentication failed. Verify `OPENAI_API_KEY` is set correctly in Vercel.',
-        });
-      }
-
-      return res.status(500).json({
-        error: 'Failed to generate scenarios. Please try again.',
-      });
+    if (!aiResult.ok) {
+      const clientMessage = mapAiError(aiResult.status, aiResult.message, provider);
+      const httpStatus = aiResult.status === 429 ? 429 : 500;
+      return res.status(httpStatus).json({ error: clientMessage });
     }
 
-    const data = await openaiResponse.json();
-    const rawContent = data.choices[0]?.message?.content || '';
-
-    let parsed: { scenarios?: GeneratedScenarioPayload[] };
-    try {
-      parsed = JSON.parse(rawContent);
-    } catch {
-      return res.status(500).json({ error: 'Invalid AI response format' });
+    const parsed = parseScenariosJson(aiResult.text, figmaLink);
+    if (!parsed.ok) {
+      return res.status(500).json({ error: parsed.error });
     }
 
-    const list = Array.isArray(parsed.scenarios) ? parsed.scenarios : [];
-    if (list.length === 0) {
-      return res.status(500).json({ error: 'No scenarios generated' });
-    }
-
-    const scenarios = list.map((s) => ({
-      name: String(s.name ?? '').trim(),
-      flowOrScreen: String(s.flowOrScreen ?? '').trim(),
-      description: String(s.description ?? '').trim(),
-      steps: Array.isArray(s.steps) ? s.steps.map((x) => String(x)) : [],
-      expectedResult: String(s.expectedResult ?? '').trim(),
-      figmaLink,
-    }));
-
-    return res.status(200).json({ scenarios });
+    return res.status(200).json({ scenarios: parsed.scenarios });
   } catch (error: any) {
     console.error('Error processing request:', error);
     return res.status(500).json({
