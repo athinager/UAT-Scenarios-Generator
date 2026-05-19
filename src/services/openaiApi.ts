@@ -64,7 +64,20 @@ export async function generateScenariosFromFigmaLink(figmaLink: string): Promise
       if (isDev) {
         throw new Error('Cannot connect to API. Make sure "vercel dev" is running on port 3000.');
       }
-      throw new Error('Cannot connect to API. Please check your internet connection.');
+
+      const apiUrl = getApiUrl();
+      const onGitHubPages =
+        typeof window !== 'undefined' && window.location.hostname.endsWith('github.io');
+
+      if (onGitHubPages) {
+        throw new Error(
+          `Cannot reach the API at ${apiUrl}. Common causes: (1) Vercel Deployment Protection is ON — in Vercel go to Project → Settings → Deployment Protection and disable "Vercel Authentication" for Production, then redeploy; (2) wrong API URL — set GitHub secret VITE_VERCEL_API_URL to your public Vercel URL; (3) the API project is not deployed. You can also use the app directly on Vercel instead of GitHub Pages.`
+        );
+      }
+
+      throw new Error(
+        `Cannot connect to API at ${apiUrl}. If this project uses Vercel Deployment Protection, disable it for Production under Project → Settings → Deployment Protection.`
+      );
     }
 
     if (err.message) {
